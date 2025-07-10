@@ -1,0 +1,467 @@
+```{r}
+require(tidyverse)
+require(data.table)
+require(randomForest)
+require(mclust)
+require(rpart)
+require(rpart.plot)
+require(foreign)
+require(e1071)
+```
+Selection
+#Data Source
+#https://www.kaggle.com/datasets/whenamancodes/credit-card-customers-prediction
+
+Pre-processing
+```{r}
+#首先，我先读取数据BankChurners.csv，new_custom，new_customer
+data1 <- read.csv("BankChurners.csv")
+data2 <- read.csv("new_custom.csv")
+data3 <- read.csv("new_customer.csv")
+#备份
+cleasing1<-data1
+cleasing2<-data2
+cleasing3<-data3
+#missing data
+sum(is.na(cleasing1))
+sum(is.na(cleasing2))
+sum(is.na(cleasing3))
+cleasing1
+cleasing2
+cleasing3
+```
+
+Excellent: 0-10% utilization
+Good: 10-30% utilization
+Fair: 30-50% utilization
+Poor: 50% or higher utilization
+Transformation
+```{r}
+
+```
+
+```{r}
+#（useingcleasing1 ）
+Transform <- cleasing1
+Transform <- data.frame(
+  Avg_Utilization_Ratio = c(0.061, 0.105, 0.000, 0.760, 0.000, 0.311, 0.066, 0.048)
+)
+Transform$Util_Rank <- character(nrow(Transform))  
+for (i in 1:nrow(Transform)) {
+  ratio <- Transform$Avg_Utilization_Ratio[i]
+  if (ratio >= 0 && ratio <= 0.10) {
+    Transform$Util_Rank[i] <- "Excellent"
+  } else if (ratio > 0.10 && ratio <= 0.30) {
+    Transform$Util_Rank[i] <- "Good"
+  } else if (ratio > 0.30 && ratio <= 0.50) {
+    Transform$Util_Rank[i] <- "Fair"
+  } else if (ratio > 0.50) {
+    Transform$Util_Rank[i] <- "Poor"
+  } else {
+    Transform$Util_Rank[i] <- NA_character_  
+  }
+}
+Transform
+```
+
+```{r}
+# 哎呀，后面需要这个，我把他们一一匹配进去
+data1$Util_Rank <- character(nrow(data1))  
+
+for (i in 1:nrow(data1)) {
+  ratio <- data1$Avg_Utilization_Ratio[i]
+  if (ratio >= 0 && ratio <= 0.10) {
+    data1$Util_Rank[i] <- "Excellent"
+  } else if (ratio > 0.10 && ratio <= 0.30) {
+    data1$Util_Rank[i] <- "Good"
+  } else if (ratio > 0.30 && ratio <= 0.50) {
+    data1$Util_Rank[i] <- "Fair"
+  } else if (ratio > 0.50) {
+    data1$Util_Rank[i] <- "Poor"
+  } else {
+    data1$Util_Rank[i] <- NA_character_
+  }
+}
+
+#新的data1
+data1
+```
+
+Descriptive Analysis
+Question1 - Basic Aggregration
+```{r}
+#Summarise the average credit limit by different card type
+# Get all unique card types（Useing cleasing1 ）
+Card_Category <- unique(cleasing1$Card_Category)  
+Card_Category
+# Results storage
+avg_credit_limit <- numeric(length(Card_Category))  
+avg_credit_limit
+# Iterate over card types and calculate average credit limits
+for (i in seq_along(Card_Category)) {
+  # Filtering data for the current card type
+  subset_data <- cleasing1[cleasing1$Card_Category == Card_Category[i], ]  
+  # Calculation of average credit limits (ignoring missing values)
+  avg_credit_limit[i] <- mean(subset_data$Credit_Limit, na.rm = TRUE)  
+}
+# Collation results
+result_credit <- data.frame(
+  Card_Category = Card_Category, 
+  Avg_Credit_Limit = avg_credit_limit
+)
+# result
+result_credit
+#count the number of different education level
+
+education_levels <- unique(cleasing1$Education_Level)  
+education_levels
+# Results storage
+edu_count <- numeric(length(education_levels)) 
+# Traversing the level of education and counting the number of clients
+for (i in seq_along(education_levels)) {
+  # Statistics on the number of clients at the current level of education (ignoring missing values)
+  edu_count[i] <- sum(cleasing1$Education_Level == education_levels[i], na.rm = TRUE)  
+}
+# Collate results into dataframes
+result_edu <- data.frame(
+  Education_Level = education_levels, 
+  Count = edu_count
+)
+#result
+result_edu
+#Summaries Average of Open to buy all Income Category
+# Access to a unique income category
+income_categories <- unique(cleasing1$Income_Category)
+# Results storage😁
+avg_open_to_buy <- numeric(length(income_categories))
+# Calculated average“Avg_Open_To_Buy”
+for (i in seq_along(income_categories)) {
+  # Filtering data for the current income category
+  subset_data <- cleasing1[cleasing1$Income_Category == income_categories[i], ]
+  # Calculation of the average "Avg_Open_To_Buy"
+  avg_open_to_buy[i] <- mean(subset_data$Avg_Open_To_Buy, na.rm = TRUE)
+}
+# Collate results into dataframes
+result_open_to_buy <- data.frame(
+  Income_Category = income_categories,
+  Avg_Open_To_Buy = avg_open_to_buy
+)
+# output
+result_open_to_buy
+
+```
+
+Question2 - Basic statics (Bar)
+```{r}
+# Sort data frame by Avg_Open_To_Buy descending order
+sorted_result <- result_open_to_buy[order(-result_open_to_buy$Avg_Open_To_Buy), ]
+
+# 3. bar
+barplot(
+  height = sorted_result$Avg_Open_To_Buy,  # y-axis data (sorted)
+  names.arg = sorted_result$Income_Category,  # x-axis labels (sorted)
+  xlab = "Income Category", 
+  ylab = "Average OTP (Open to Pay)", 
+  main = "Average OTP by Income Category (Sorted Descending)", 
+  col = "grey", 
+  las = 2,  # Rotating x-axis labels
+  cex.names = 0.8, 
+  ylim = c(0, max(sorted_result$Avg_Open_To_Buy, na.rm = TRUE) * 1.1)
+)
+
+
+text(
+  x = barplot(sorted_result$Avg_Open_To_Buy, plot = FALSE), 
+  y = sorted_result$Avg_Open_To_Buy + 500, 
+  labels = round(sorted_result$Avg_Open_To_Buy, 2), 
+  cex = 0.8, 
+  col = "black"
+)
+```
+
+Question3 - Basic statics (pie)
+```{r}
+# 统计不同教育资格的客户数量，同时指定类别顺序，按照图片来的，，，，，
+edu_order <- c("Graduate", "High School", "Unknown", 
+               "Uneducated", "College", "Post-Graduate", "Doctorate")
+edu_counts <- table(factor(cleasing1$Education_Level, levels = edu_order))
+
+# 定义颜色向量，按照图片顺序，哎呀，没有紫色，只能弄个grey看看。
+colors <- c("white", "lightblue", "pink", "lightyellow", "grey", "lightcyan", "gray")
+
+pie(
+  edu_counts,
+  labels = paste(names(edu_counts), "\n", edu_counts, "人 (", #sooooo,人是个什么？
+                 round(edu_counts / sum(edu_counts) * 100, 2), "%)", sep = ""),
+  main = "Customer Education Qualification Proportion",
+  col = colors
+)
+```
+
+Question4 - Relation(scatter)
+```{r}
+# useing cleasing1，is Total_Trans_Amt and  Total_Trans_Ct 
+x <- data1$Total_Trans_Amt  
+y <- data1$Total_Trans_Ct   
+
+#1.scatter
+plot(
+  x, y, 
+  xlab = "Transform$Total_Trans_Amt",     
+  ylab = "Total_Trans_Ct",      
+  main = "Relation between Credit Transaction Amount and Count",  
+  pch = 16,                     
+  col = "black",                
+  cex = 0.6                     
+)
+
+# 2. Adding a Linear Fit Line
+model <- lm(y ~ x)  # linear regression model,soooooooo
+abline(model, col = "red", lwd = 1)  # Plotting the fitted line (red, line width [看图片感觉是1])
+
+# 3. Calculate and add R² values
+r_squared <- summary(model)$r.squared
+text(
+  x = max(x) * 0.6,  # 文本位置（x轴60%处）[感觉是在60%左右，x.y都是一样的]
+  y = max(y) * 0.6,  # 文本位置（y轴60%处）
+  labels = bquote(R^2 == .(round(r_squared, 2))),  # 显示 R²
+  cex = 1.2          # The font size is about the same.
+)
+```
+
+
+https://www.digitalocean.com/community/tutorials/normalize-data-in-r
+https://stats.stackexchange.com/questions/298507/mclust-model-names-corresponding-to-common-models-i-e-those-used-for-lpa-lc
+Modelname EEE = Equal variances and equal covariances
+if you want to make the clustering like a matrix, try to use modelname EEE
+Question5 - Clustering
+```{r}
+
+X <- data1[, c("Total_Trans_Ct", "Customer_Age")]  
+
+# 2. 数据预处理（基础版）
+
+# 处理缺失值（填中位数）
+for (col in names(X)) {
+  X[[col]][is.na(X[[col]])] <- median(X[[col]], na.rm = TRUE)
+}
+
+# 标准化（Z-score）
+for (col in names(X)) {
+  X[[col]] <- (X[[col]] - mean(X[[col]])) / sd(X[[col]])
+}
+
+# ========================
+# 3. K-means 聚类（4 类）
+# ========================
+set.seed(123)
+model <- kmeans(X, centers = 4)
+cluster_assign <- model$cluster
+
+# 4. 可视化（严格匹配目标图）
+
+# 定义颜色和形状（目标图样式）
+colors <- c("green", "purple", "blue", "red")  
+shapes <- c(17, 3, 16, 14)   #小小三角形，+，blue实心的小圆点，red空心方块，哎呀，我查了资料是14，但是它怎么出现了一个小八
+
+# 绘制散点图
+plot(
+  x = data1$Total_Trans_Ct, 
+  y = data1$Customer_Age, 
+  pch = shapes[cluster_assign], 
+  col = colors[cluster_assign], 
+  xlab = "Transform.Total_Trans_Ct",
+  ylab = "Transform.Customer_Age",
+  main = "Clustering: Classify four types of credit card users",
+  cex = 0.8
+)
+
+# 添加聚类椭圆 + 黑色十字交叉 
+for (k in 1:4) {
+  cluster_data <- data1[cluster_assign == k, c("Total_Trans_Ct", "Customer_Age")]
+  mean_ct <- mean(cluster_data$Total_Trans_Ct)
+  mean_age <- mean(cluster_data$Customer_Age)
+  cov_mat <- cov(cluster_data)
+  
+  # 绘制椭圆（原逻辑）
+  theta <- seq(0, 2*pi, length.out = 100)
+  ellipse <- cbind(
+    mean_ct + sqrt(cov_mat[1,1])*cos(theta),
+    mean_age + sqrt(cov_mat[2,2])*sin(theta)
+  )
+  lines(ellipse, col = "black", lwd = 1)
+  
+  
+#Add a black cross (+ shape)
+
+  cross_size <- max(sqrt(cov_mat[1,1]), sqrt(cov_mat[2,2])) * 0.1
+  segments(
+    x0 = mean_ct - cross_size, y0 = mean_age, 
+    x1 = mean_ct + cross_size, y1 = mean_age, 
+    col = "black", lwd = 1
+  )
+  segments(
+    x0 = mean_ct, y0 = mean_age - cross_size, 
+    x1 = mean_ct, y1 = mean_age + cross_size, 
+    col = "black", lwd = 1
+  )
+  
+
+
+}
+```
+
+Question6 - pattern finding(CART tree)
+```{r}
+library(rpart)
+library(rpart.plot)
+# 创建决策树模型
+decision_tree <- rpart(Util_Rank ~ Income_Category + Total_Revolving_Bal, 
+                        data = data1, 
+                        method = "class")
+
+
+print(decision_tree)
+
+
+rpart.plot(decision_tree, main = "Credit Card Utilization Decision Tree")
+
+```
+
+Question7 - classification(Naive Bias)
+```{r}
+library(e1071)
+#NB Classification
+train_data <- data1
+# 
+train_data$Util_Rank <- as.factor(train_data$Util_Rank)
+
+# Training a plain Naive Bias
+nb_model <- naiveBayes(
+  Util_Rank ~ .,  
+  data = train_data
+)
+#new customers
+new_customers <- data2
+
+#make an enquiry
+predictions <- predict(nb_model, newdata = new_customers)
+#aiya~~~~~,what ?
+predictions
+
+
+```
+
+Question8 - Prediction/simulation (random Forest)
+```{r}
+
+#model building
+data1$Credit_Limit <- as.factor(data1$Credit_Limit)
+
+# 划分训练集和测试集（原代码）
+set.seed(123)
+train_idx <- sample(nrow(data1), nrow(data1) * 0.7)
+train_data <- data1[train_idx, ]
+test_data <- data1[-train_idx, ]
+
+# 关键修复：检查并过滤空类别
+cat("训练集类别分布：\n")
+print(table(train_data$Credit_Limit))
+# 只保留有样本的类别
+train_data <- train_data[train_data$Credit_Limit %in% names(which(table(train_data$Credit_Limit) > 0)), ]
+# 重新转换为因子，确保类别正确（因为过滤后类别可能变化）
+train_data$Credit_Limit <- as.factor(train_data$Credit_Limit)
+
+
+cat("修复后训练集类别分布：\n")
+print(table(train_data$Credit_Limit))
+
+# 模型构建（重新训练）
+set.seed(456)
+rf_model <- randomForest(
+  Credit_Limit ~ Income_Category + Customer_Age, 
+  data = train_data,
+  ntree = 500, 
+  importance = TRUE
+)
+
+# 后续测试代码（原代码不变）
+#model testing
+test_pred <- predict(rf_model, newdata = test_data)
+conf_mat <- table(test_data$Credit_Limit, test_pred)
+accuracy <- sum(diag(conf_mat)) / sum(conf_mat)
+print(conf_mat)
+cat("模型准确率：", accuracy, "\n")
+
+#choose one row data for testing
+new_customer <- data.table(
+  Income_Category = "Medium",  
+  Customer_Age = 35            
+)
+
+new_customer_pred <- predict(rf_model, newdata = new_customer)
+print("新客户信用额度分类预测结果：")
+print(new_customer_pred)
+```
+
+Evualtion
+```{r}
+# 加载必要的包
+require(tidyverse)
+require(data.table)
+require(randomForest)
+library(data.table)
+
+
+# 数据预处理
+# 确保Credit_Limit列是因子类型
+data1$Credit_Limit <- as.factor(data1$Credit_Limit)
+
+# 检查类别分布，确保没有空类别
+cat("类别分布检查：\n")
+print(table(data1$Credit_Limit))
+
+# 合并或过滤罕见类别（如果有）
+# 示例：合并Low和Medium类别
+# data1$Credit_Limit[data1$Credit_Limit %in% c("Low", "Medium")] <- "Low-Medium"
+# data1$Credit_Limit <- as.factor(data1$Credit_Limit)
+
+# 划分训练集和测试集
+set.seed(123)
+train_idx <- sample(nrow(data1), nrow(data1) * 0.7)
+train_data <- data1[train_idx, ]
+test_data <- data1[-train_idx, ]
+
+# 模型构建
+set.seed(456)
+rf_model <- randomForest(
+  Credit_Limit ~ Income_Category + Customer_Age,
+  data = train_data,
+  ntree = 500,
+  importance = TRUE
+)
+
+# 特征重要性可视化
+varImpPlot(rf_model)
+
+# 模型测试
+test_pred <- predict(rf_model, newdata = test_data)
+conf_mat <- table(test_data$Credit_Limit, test_pred)
+accuracy <- sum(diag(conf_mat)) / sum(conf_mat)
+
+cat("\n模型评估结果：\n")
+print(conf_mat)
+cat("模型准确率：", accuracy, "\n")
+
+# 新客户预测示例
+# 确保特征与训练时使用的特征一致
+new_customer <- data.table(
+  Income_Category = "Medium",  # 根据实际情况修改
+  Customer_Age = 35            # 根据实际情况修改
+)
+
+new_customer_pred <- predict(rf_model, newdata = new_customer)
+cat("\n新客户信用额度预测结果：", new_customer_pred, "\n")    
+```
+
+#Write you finding in Report, Thanks!
